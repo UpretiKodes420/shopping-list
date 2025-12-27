@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shopping_list/data/categories.dart';
+import 'package:shopping_list/models/category.dart';
 import 'package:shopping_list/widgets/new_item.dart';
 import 'package:shopping_list/models/grocery_item.dart';
 import 'package:shopping_list/widgets/category_item.dart';
@@ -28,8 +30,27 @@ class _CategoryItemsState extends State<CategoryItems> {
       "shopping-list.json",
     );
     var response = await http.get(url);
-    Map<String, Map<String, dynamic>> itemResponse = json.decode(response.body);
-    print(itemResponse);
+    Map<String, dynamic> dbFetchedData = json.decode(response.body);
+    List<GroceryItem> loadedItems = [];
+    for (final item in dbFetchedData.entries) {
+      Category cat = categories.entries
+          .firstWhere(
+            (categoryItem) =>
+                item.value["category"] == categoryItem.value.title,
+          )
+          .value;
+      loadedItems.add(
+        GroceryItem(
+          id: item.key,
+          name: item.value["name"],
+          quantity: item.value["quantity"],
+          category: cat,
+        ),
+      );
+    }
+    setState(() {
+      itemSet = loadedItems;
+    });
   }
 
   @override
@@ -69,10 +90,32 @@ class _CategoryItemsState extends State<CategoryItems> {
                 key: ValueKey(itemSet[index].id),
                 direction: DismissDirection.startToEnd,
                 child: CategoryItemViewer(item: itemSet[index]),
-                onDismissed: (direction) {
-                  setState(() {
-                    itemSet.remove(itemSet[index]);
-                  });
+                onDismissed: (direction) async {
+                  var url = Uri.https(
+                    "shopping-list-f9d11-default-rtdb.firebaseio.com",
+                    "shopping-list/${itemSet[index].id}.json",
+                  );
+                  var response = await http.delete(url);
+                  String Message = "";
+
+                  if (response.statusCode >= 200 && response.statusCode < 300) {
+                    setState(() {
+                      itemSet.remove(itemSet[index]);
+                    });
+
+                    Message = "Sucessfully deleted grocery Item from list";
+                  } else {
+                    Message =
+                        "Some Error occured while deleting the item from list";
+                  }
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("${response.statusCode} $Message"),
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  }
                 },
               ),
             ),
